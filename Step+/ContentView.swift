@@ -439,16 +439,19 @@ struct AutoWalkView: View {
             hasShownThresholdWarning = false
             
             timeRemaining = minutes * 60
-            totalStepsInjected = 0
+            totalStepsInjected = 0 // Used purely for the smooth UI
             isRunning = true
             isPaused = false
+            
+            // Read the humanize setting (defaults to true if never opened)
+            let humanizeObject = UserDefaults.standard.object(forKey: "humanizeData")
+            let humanizeData = humanizeObject == nil ? true : humanizeObject as! Bool
             
             // --- LIVE ACTIVITY: START ---
             if ActivityAuthorizationInfo().areActivitiesEnabled {
                 let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
                 let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
                 
-                // SWIFT 6 FIX: Force execution on the MainActor
                 Task { @MainActor in
                     let content = ActivityContent(state: initialState, staleDate: nil)
                     do {
@@ -460,25 +463,41 @@ struct AutoWalkView: View {
             }
             
             let stepsPerSecond = rate / 60.0
-            var stepsWaitingForInjection = 0.0
+            let base10sBatch = stepsPerSecond * 10.0
+            
+            // NEW: Track what actually goes into the database to true-up at the end
+            var actuallyInjectedToHealthKit = 0.0
+            let targetTotalAsDouble = Double(projectedTotalSteps)
             
             timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 if !isPaused {
                     timeRemaining -= 1.0
+                    
+                    // Keep the UI smooth and linear
                     totalStepsInjected += stepsPerSecond
-                    stepsWaitingForInjection += stepsPerSecond
                     
                     // --- LIVE ACTIVITY: UPDATE ---
-                    // SWIFT 6 FIX: Force execution on the MainActor
                     Task { @MainActor in
                         let updatedState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: Int(totalStepsInjected))
                         let content = ActivityContent(state: updatedState, staleDate: nil)
                         await liveActivity?.update(content)
                     }
                     
+                    // --- HEALTHKIT BATCH WRITE (Every 10 seconds or at the end) ---
                     if Int(timeRemaining) % 10 == 0 || timeRemaining <= 0 {
-                        let stepsToInject = stepsWaitingForInjection
-                        stepsWaitingForInjection = 0
+                        
+                        var stepsToInject = 0.0
+                        
+                        if timeRemaining <= 0 {
+                            // THE TRUE-UP: On the exact last second, inject whatever is left to hit the exact target
+                            stepsToInject = max(0, targetTotalAsDouble - actuallyInjectedToHealthKit)
+                        } else {
+                            // THE HUMANIZER: Apply a random variance between 85% and 115% of the base batch
+                            let variance = humanizeData ? Double.random(in: 0.85...1.15) : 1.0
+                            stepsToInject = base10sBatch * variance
+                        }
+                        
+                        actuallyInjectedToHealthKit += stepsToInject
                         
                         stepManager.injectSafely(steps: stepsToInject) { success, errorMessage, warning in
                             DispatchQueue.main.async {
@@ -653,6 +672,8 @@ struct SettingsView: View {
     @AppStorage("enableThresholdAlert") private var enableThresholdAlert = false
     @AppStorage("thresholdPercentage") private var thresholdPercentage = 80
     
+    @AppStorage("humanizeData") private var humanizeData = true
+    
     var body: some View {
         NavigationView {
             Form {
@@ -690,6 +711,13 @@ struct SettingsView: View {
                             .padding(.vertical, 4)
                         }
                     }
+                }
+                
+                Section(
+                    header: Text("Simulation Preferences"),
+                    footer: Text("Applies a ±15% random speed variance to your walk to bypass anti-cheat systems. The final total remains exactly the same.")
+                ) {
+                    Toggle("Humanize Data Randomization", isOn: $humanizeData)
                 }
                 
                 Section(header: Text("About")) {
