@@ -1,31 +1,28 @@
 import SwiftUI
 import HealthKit
+import ActivityKit
 
 struct ContentView: View {
     var body: some View {
         TabView {
             QuickInjectView()
-                .tabItem {
-                    Label("Quick", systemImage: "bolt.fill")
-                }
+                .tabItem { Label("Quick", systemImage: "bolt.fill") }
             
             AutoWalkView()
-                .tabItem {
-                    Label("Auto Walk", systemImage: "figure.walk.motion")
-                }
+                .tabItem { Label("Auto Walk", systemImage: "figure.walk.motion") }
             
-            // NEW: The 3rd Tab
             StatisticView()
-                .tabItem {
-                    Label("Statistic", systemImage: "chart.bar.xaxis")
-                }
+                .tabItem { Label("Statistic", systemImage: "chart.bar.xaxis") }
+            
+            SettingsView()
+                .tabItem { Label("Configs", systemImage: "gearshape.fill") }
         }
         .accentColor(.teal)
     }
 }
 
 // ==========================================
-// TAB 1: The Original Quick Inject Interface
+// TAB 1: Quick Inject Interface
 // ==========================================
 struct QuickInjectView: View {
     let stepManager = StepManager()
@@ -154,6 +151,7 @@ struct QuickInjectView: View {
         } message: {
             Text("Are you sure you want to \(isAdding ? "add" : "deduct") \(Int(pendingSteps)) steps?")
         }
+        // General Notice / Warning Alert
         .alert("Notice", isPresented: $showResultAlert) {
             Button("OK", role: .cancel) { }
         } message: { Text(alertMessage) }
@@ -171,23 +169,42 @@ struct QuickInjectView: View {
     }
     
     private func executeAction() {
-        let completion: (Bool, String) -> Void = { success, message in
-            if success {
-                toastMessage = message
-                triggerSuccessHaptic()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showToast = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showToast = false }
+        // THE FIX: Handles the new warning message
+        let completion: (Bool, String?, String?) -> Void = { success, message, warning in
+            DispatchQueue.main.async {
+                if success {
+                    if let warningText = warning {
+                        // Display the warning as a popup instead of a toast
+                        alertMessage = warningText
+                        showResultAlert = true
+                    } else {
+                        toastMessage = message ?? "Success!"
+                        triggerSuccessHaptic()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showToast = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { showToast = false }
+                        }
+                    }
+                } else {
+                    alertMessage = message ?? "An unknown error occurred."
+                    showResultAlert = true
                 }
-            } else { alertMessage = message; showResultAlert = true }
+            }
         }
-        if isAdding { stepManager.inject(steps: pendingSteps, completion: completion) }
-        else { stepManager.deduct(stepsToRemove: pendingSteps, completion: completion) }
+        
+        if isAdding {
+            stepManager.injectSafely(steps: pendingSteps, completion: completion)
+        } else {
+            // Standard deduct doesn't need to check limits, so we map it back
+            stepManager.deduct(stepsToRemove: pendingSteps) { success, message in
+                completion(success, message, nil)
+            }
+        }
     }
 }
 
 // ==========================================
-// TAB 2: The New Auto Walk Interface
+// TAB 2: Auto Walk Interface
 // ==========================================
 struct AutoWalkView: View {
     let stepManager = StepManager()
@@ -199,17 +216,25 @@ struct AutoWalkView: View {
     @State private var isPaused = false
     @State private var timeRemaining: TimeInterval = 0
     @State private var timer: Timer?
+    @State private var liveActivity: Activity<WalkAttributes>? = nil
     
     @State private var totalStepsInjected: Double = 0
     
-    // Computed property to instantly calculate the preview total
+    // Alert states
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    
+    // NEW: Threshold Warning States
+    @State private var showWarningAlert = false
+    @State private var warningMessage = ""
+    @State private var hasShownThresholdWarning = false
+    
     private var projectedTotalSteps: Int {
         let mins = Double(minutesString) ?? 0
         let rate = Double(stepsPerMinuteString) ?? 0
         return Int(mins * rate)
     }
     
-    // NEW: Define the Quick Apply Presets
     struct WalkPreset: Hashable {
         let name: String
         let icon: String
@@ -271,7 +296,7 @@ struct AutoWalkView: View {
                 }
                 .padding(.top, 40)
                 
-                // --- NEW: QUICK PRESETS SCROLL VIEW ---
+                // --- QUICK PRESETS SCROLL VIEW ---
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(quickPresets, id: \.name) { preset in
@@ -290,7 +315,6 @@ struct AutoWalkView: View {
                                 .padding(.vertical, 10)
                                 .background(preset.color)
                                 .clipShape(Capsule())
-                                // Slightly dim the button if the timer is already running
                                 .opacity(isRunning ? 0.5 : 1.0)
                             }
                             .disabled(isRunning)
@@ -311,9 +335,7 @@ struct AutoWalkView: View {
                             .frame(width: 100)
                             .disabled(isRunning)
                     }
-                    
                     Divider()
-                    
                     HStack {
                         Text("Steps / Min")
                             .fontWeight(.medium)
@@ -324,9 +346,7 @@ struct AutoWalkView: View {
                             .frame(width: 100)
                             .disabled(isRunning)
                     }
-                    
                     Divider()
-                    
                     HStack {
                         Text("Target Total")
                             .fontWeight(.bold)
@@ -386,63 +406,124 @@ struct AutoWalkView: View {
             }
         }
         .onTapGesture { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
-    }
-    
-    // --- HELPER LOGIC ---
-    
-    private func triggerHaptic() {
-        let impact = UIImpactFeedbackGenerator(style: .light)
-        impact.impactOccurred()
-    }
-    
-    // --- TIMER LOGIC ---
-    
-    private func startTimer() {
-        guard projectedTotalSteps > 0 else { return }
-        let minutes = Double(minutesString) ?? 0
-        let rate = Double(stepsPerMinuteString) ?? 0
         
-        UIApplication.shared.isIdleTimerDisabled = true
+        // Hard Limit Alert
+        .alert("Safeguard Triggered", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
+        }
         
-        timeRemaining = minutes * 60
-        totalStepsInjected = 0
-        isRunning = true
-        isPaused = false
-        
-        let stepsPerSecond = rate / 60.0
-        let injectionInterval: TimeInterval = 10.0
-        let stepsPerInterval = stepsPerSecond * injectionInterval
-        
-        timer = Timer.scheduledTimer(withTimeInterval: injectionInterval, repeats: true) { _ in
-            if !isPaused {
-                timeRemaining -= injectionInterval
-                
-                stepManager.inject(steps: stepsPerInterval) { success, _ in
-                    if success {
-                        totalStepsInjected += stepsPerInterval
-                    }
-                }
-                
-                if timeRemaining <= 0 {
-                    stopTimer()
-                }
+        // NEW: Approach Warning Alert (Interactive)
+        .alert("Approaching Limit", isPresented: $showWarningAlert) {
+            Button("Continue Walking") {
+                isPaused = false
+                UIApplication.shared.isIdleTimerDisabled = true
             }
+            Button("Stop Timer", role: .cancel) { stopTimer() }
+        } message: {
+            Text(warningMessage)
         }
     }
     
-    private func togglePause() {
-        isPaused.toggle()
-        UIApplication.shared.isIdleTimerDisabled = !isPaused
-    }
+    // --- HELPER LOGIC ---
+    private func triggerHaptic() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-        isRunning = false
-        isPaused = false
-        timeRemaining = 0
-        UIApplication.shared.isIdleTimerDisabled = false
-    }
+    // --- TIMER LOGIC ---
+        private func startTimer() {
+            guard projectedTotalSteps > 0 else { return }
+            let minutes = Double(minutesString) ?? 0
+            let rate = Double(stepsPerMinuteString) ?? 0
+            
+            UIApplication.shared.isIdleTimerDisabled = true
+            hasShownThresholdWarning = false
+            
+            timeRemaining = minutes * 60
+            totalStepsInjected = 0
+            isRunning = true
+            isPaused = false
+            
+            // --- LIVE ACTIVITY: START ---
+            if ActivityAuthorizationInfo().areActivitiesEnabled {
+                let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
+                let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
+                
+                // SWIFT 6 FIX: Force execution on the MainActor
+                Task { @MainActor in
+                    let content = ActivityContent(state: initialState, staleDate: nil)
+                    do {
+                        liveActivity = try Activity.request(attributes: attributes, content: content)
+                    } catch {
+                        print("Failed to start Live Activity: \(error)")
+                    }
+                }
+            }
+            
+            let stepsPerSecond = rate / 60.0
+            var stepsWaitingForInjection = 0.0
+            
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                if !isPaused {
+                    timeRemaining -= 1.0
+                    totalStepsInjected += stepsPerSecond
+                    stepsWaitingForInjection += stepsPerSecond
+                    
+                    // --- LIVE ACTIVITY: UPDATE ---
+                    // SWIFT 6 FIX: Force execution on the MainActor
+                    Task { @MainActor in
+                        let updatedState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: Int(totalStepsInjected))
+                        let content = ActivityContent(state: updatedState, staleDate: nil)
+                        await liveActivity?.update(content)
+                    }
+                    
+                    if Int(timeRemaining) % 10 == 0 || timeRemaining <= 0 {
+                        let stepsToInject = stepsWaitingForInjection
+                        stepsWaitingForInjection = 0
+                        
+                        stepManager.injectSafely(steps: stepsToInject) { success, errorMessage, warning in
+                            DispatchQueue.main.async {
+                                if success {
+                                    if let warningText = warning, !hasShownThresholdWarning {
+                                        hasShownThresholdWarning = true
+                                        isPaused = true
+                                        UIApplication.shared.isIdleTimerDisabled = false
+                                        warningMessage = warningText
+                                        showWarningAlert = true
+                                    }
+                                    if timeRemaining <= 0 { stopTimer() }
+                                } else if let error = errorMessage {
+                                    stopTimer()
+                                    alertMessage = error
+                                    showAlert = true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        private func togglePause() {
+            isPaused.toggle()
+            UIApplication.shared.isIdleTimerDisabled = !isPaused
+        }
+        
+        private func stopTimer() {
+            timer?.invalidate()
+            timer = nil
+            isRunning = false
+            isPaused = false
+            timeRemaining = 0
+            UIApplication.shared.isIdleTimerDisabled = false
+            
+            // --- LIVE ACTIVITY: END ---
+            // SWIFT 6 FIX: Force execution on the MainActor
+            Task { @MainActor in
+                let finalState = WalkAttributes.ContentState(timeRemaining: "Finished", stepsInjected: Int(totalStepsInjected))
+                let content = ActivityContent(state: finalState, staleDate: nil)
+                await liveActivity?.end(content, dismissalPolicy: .immediate)
+            }
+        }
     
     private func timeFormatted(_ totalSeconds: TimeInterval) -> String {
         let seconds: Int = Int(totalSeconds) % 60
@@ -452,7 +533,7 @@ struct AutoWalkView: View {
 }
 
 // ==========================================
-// TAB 3: The New Statistic Interface
+// TAB 3: Statistic Interface
 // ==========================================
 struct StatisticView: View {
     let stepManager = StepManager()
@@ -464,14 +545,11 @@ struct StatisticView: View {
     var body: some View {
         ZStack {
             Color(UIColor.systemGroupedBackground).ignoresSafeArea()
-            
             VStack(spacing: 20) {
-                // HEADER
                 HStack {
                     Text("Today's Data")
                         .font(.system(size: 34, weight: .heavy, design: .rounded))
                     Spacer()
-                    // Refresh Button
                     Button(action: loadStatistics) {
                         Image(systemName: "arrow.clockwise.circle.fill")
                             .font(.title)
@@ -488,7 +566,6 @@ struct StatisticView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 20) {
-                            // TOTAL STEPS CARD
                             VStack(spacing: 8) {
                                 Text("Total Raw Steps")
                                     .font(.headline)
@@ -504,7 +581,6 @@ struct StatisticView: View {
                             .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
                             .padding(.horizontal, 20)
                             
-                            // SOURCES BREAKDOWN CARD
                             VStack(alignment: .leading, spacing: 20) {
                                 Text("Data Sources")
                                     .font(.title3.bold())
@@ -513,11 +589,9 @@ struct StatisticView: View {
                                     Text("No step data recorded today.")
                                         .foregroundColor(.secondary)
                                 } else {
-                                    // Sort sources from highest steps to lowest
                                     ForEach(sourceData.sorted(by: { $0.value > $1.value }), id: \.key) { source in
                                         VStack(spacing: 8) {
                                             HStack {
-                                                // Highlight our custom app name
                                                 Text(source.key)
                                                     .font(.headline)
                                                     .foregroundColor(source.key == "Steps+" ? .teal : .primary)
@@ -527,7 +601,6 @@ struct StatisticView: View {
                                                     .monospacedDigit()
                                             }
                                             
-                                            // Visual Progress Bar
                                             GeometryReader { geometry in
                                                 ZStack(alignment: .leading) {
                                                     Capsule()
@@ -554,21 +627,81 @@ struct StatisticView: View {
                 }
             }
         }
-        // Fetch data every time the user taps on this tab
-        .onAppear {
-            loadStatistics()
-        }
+        .onAppear { loadStatistics() }
     }
     
     private func loadStatistics() {
         isLoading = true
-        // Add a tiny delay to allow HealthKit to catch up if we just injected steps
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             stepManager.fetchTodayStepSources { total, sources in
                 self.totalSteps = total
                 self.sourceData = sources
                 self.isLoading = false
             }
+        }
+    }
+}
+
+// ==========================================
+// TAB 4: User Configs & Settings
+// ==========================================
+struct SettingsView: View {
+    @AppStorage("enableDailyLimit") private var enableDailyLimit = true
+    @AppStorage("dailyStepLimit") private var dailyStepLimit = 25000
+    
+    // NEW: Threshold Alert settings
+    @AppStorage("enableThresholdAlert") private var enableThresholdAlert = false
+    @AppStorage("thresholdPercentage") private var thresholdPercentage = 80
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(
+                    header: Text("Safety Safeguards"),
+                    footer: Text("Sets a safe ceiling for your daily step count.")
+                ) {
+                    Toggle("Enable Daily Maximum", isOn: $enableDailyLimit)
+                    
+                    if enableDailyLimit {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Maximum Daily Steps: \(dailyStepLimit)")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.teal)
+                            
+                            Stepper("Adjust Limit", value: $dailyStepLimit, in: 5000...100000, step: 1000)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 4)
+                        
+                        Divider()
+                        
+                        // NEW: Threshold Toggle and Stepper
+                        Toggle("Enable Approach Warning", isOn: $enableThresholdAlert)
+                        
+                        if enableThresholdAlert {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Warning at \(thresholdPercentage)% of Limit")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.orange)
+                                
+                                Stepper("Adjust Threshold", value: $thresholdPercentage, in: 50...95, step: 5)
+                                    .labelsHidden()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+                
+                Section(header: Text("About")) {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text("1.1.0")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Configs")
         }
     }
 }

@@ -6,14 +6,75 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C8271E30300A3AD500C1FD85 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8271E2F300A3AD500C1FD85 /* WidgetKit.framework */; };
+		C8271E32300A3AD500C1FD85 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8271E31300A3AD500C1FD85 /* SwiftUI.framework */; };
+		C8271E43300A3AD700C1FD85 /* StepsWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C8271E2D300A3AD500C1FD85 /* StepsWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C8271E41300A3AD700C1FD85 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C8271E0B3009315E00C1FD85 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C8271E2C300A3AD500C1FD85;
+			remoteInfo = StepsWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		C8271E48300A3AD700C1FD85 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C8271E43300A3AD700C1FD85 /* StepsWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		C8271E133009315E00C1FD85 /* Step+.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Step+.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8271E2D300A3AD500C1FD85 /* StepsWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StepsWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8271E2F300A3AD500C1FD85 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		C8271E31300A3AD500C1FD85 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C8271E44300A3AD700C1FD85 /* Exceptions for "StepsWidget" folder in "StepsWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C8271E2C300A3AD500C1FD85 /* StepsWidgetExtension */;
+		};
+		C8271E4C300A670300C1FD85 /* Exceptions for "Step+" folder in "StepsWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				WalkAttributes.swift,
+			);
+			target = C8271E2C300A3AD500C1FD85 /* StepsWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C8271E153009315E00C1FD85 /* Step+ */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C8271E4C300A670300C1FD85 /* Exceptions for "Step+" folder in "StepsWidgetExtension" target */,
+			);
 			path = "Step+";
+			sourceTree = "<group>";
+		};
+		C8271E33300A3AD500C1FD85 /* StepsWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C8271E44300A3AD700C1FD85 /* Exceptions for "StepsWidget" folder in "StepsWidgetExtension" target */,
+			);
+			path = StepsWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +87,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C8271E2A300A3AD500C1FD85 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C8271E32300A3AD500C1FD85 /* SwiftUI.framework in Frameworks */,
+				C8271E30300A3AD500C1FD85 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +103,8 @@
 			isa = PBXGroup;
 			children = (
 				C8271E153009315E00C1FD85 /* Step+ */,
+				C8271E33300A3AD500C1FD85 /* StepsWidget */,
+				C8271E2E300A3AD500C1FD85 /* Frameworks */,
 				C8271E143009315E00C1FD85 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +113,18 @@
 			isa = PBXGroup;
 			children = (
 				C8271E133009315E00C1FD85 /* Step+.app */,
+				C8271E2D300A3AD500C1FD85 /* StepsWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C8271E2E300A3AD500C1FD85 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C8271E2F300A3AD500C1FD85 /* WidgetKit.framework */,
+				C8271E31300A3AD500C1FD85 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +137,12 @@
 				C8271E0F3009315E00C1FD85 /* Sources */,
 				C8271E103009315E00C1FD85 /* Frameworks */,
 				C8271E113009315E00C1FD85 /* Resources */,
+				C8271E48300A3AD700C1FD85 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C8271E42300A3AD700C1FD85 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C8271E153009315E00C1FD85 /* Step+ */,
@@ -69,6 +153,28 @@
 			productName = "Step+";
 			productReference = C8271E133009315E00C1FD85 /* Step+.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C8271E2C300A3AD500C1FD85 /* StepsWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C8271E45300A3AD700C1FD85 /* Build configuration list for PBXNativeTarget "StepsWidgetExtension" */;
+			buildPhases = (
+				C8271E29300A3AD500C1FD85 /* Sources */,
+				C8271E2A300A3AD500C1FD85 /* Frameworks */,
+				C8271E2B300A3AD500C1FD85 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C8271E33300A3AD500C1FD85 /* StepsWidget */,
+			);
+			name = StepsWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = StepsWidgetExtension;
+			productReference = C8271E2D300A3AD500C1FD85 /* StepsWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +187,9 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					C8271E123009315E00C1FD85 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					C8271E2C300A3AD500C1FD85 = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
@@ -100,12 +209,20 @@
 			projectRoot = "";
 			targets = (
 				C8271E123009315E00C1FD85 /* Step+ */,
+				C8271E2C300A3AD500C1FD85 /* StepsWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		C8271E113009315E00C1FD85 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C8271E2B300A3AD500C1FD85 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +239,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C8271E29300A3AD500C1FD85 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C8271E42300A3AD700C1FD85 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C8271E2C300A3AD500C1FD85 /* StepsWidgetExtension */;
+			targetProxy = C8271E41300A3AD700C1FD85 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		C8271E1C3009315F00C1FD85 /* Debug */ = {
@@ -257,6 +389,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Required to inject mock step data";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -292,6 +425,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Required to inject mock step data";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -307,6 +441,66 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C8271E46300A3AD700C1FD85 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 63Z7P96833;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StepsWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StepsWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.test.Step-.StepsWidget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C8271E47300A3AD700C1FD85 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 63Z7P96833;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = StepsWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = StepsWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.test.Step-.StepsWidget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
@@ -331,6 +525,15 @@
 			buildConfigurations = (
 				C8271E1F3009315F00C1FD85 /* Debug */,
 				C8271E203009315F00C1FD85 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C8271E45300A3AD700C1FD85 /* Build configuration list for PBXNativeTarget "StepsWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8271E46300A3AD700C1FD85 /* Debug */,
+				C8271E47300A3AD700C1FD85 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

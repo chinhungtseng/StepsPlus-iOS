@@ -136,4 +136,52 @@ class StepManager {
                 self.healthStore.execute(query)
             }
         }
+    // --- SAFE INJECTION WITH USER LIMITS ---
+        func injectSafely(steps: Double, completion: @escaping (_ success: Bool, _ errorMessage: String?, _ warningMessage: String?) -> Void) {
+            
+            // 1. Read limits
+            let enableDailyLimit = UserDefaults.standard.bool(forKey: "enableDailyLimit")
+            let dailyLimit = UserDefaults.standard.object(forKey: "dailyStepLimit") as? Int ?? 25000
+            
+            // Read warning thresholds
+            let enableThresholdAlert = UserDefaults.standard.bool(forKey: "enableThresholdAlert")
+            let thresholdPct = UserDefaults.standard.object(forKey: "thresholdPercentage") as? Int ?? 80
+            
+            if !enableDailyLimit {
+                self.inject(steps: steps) { success, message in
+                    completion(success, message, nil)
+                }
+                return
+            }
+            
+            // 2. Check HealthKit
+            self.fetchTodayStepSources { totalSteps, _ in
+                let newTotal = totalSteps + steps
+                
+                if newTotal > Double(dailyLimit) {
+                    // Hard block if limit is exceeded
+                    let overage = Int(newTotal - Double(dailyLimit))
+                    DispatchQueue.main.async {
+                        completion(false, "Daily Limit Reached!\nThis injection exceeds your maximum by \(overage) steps.", nil)
+                    }
+                } else {
+                    // Check if we are crossing the warning threshold
+                    var warning: String? = nil
+                    if enableThresholdAlert {
+                        let thresholdSteps = Double(dailyLimit) * (Double(thresholdPct) / 100.0)
+                        // Only warn if this exact injection pushes us over the line
+                        if newTotal >= thresholdSteps && totalSteps < thresholdSteps {
+                            warning = "You have reached \(thresholdPct)% of your daily limit (\(Int(newTotal)) / \(dailyLimit) steps)."
+                        }
+                    }
+                    
+                    // Inject successfully, passing along the warning if it exists
+                    self.inject(steps: steps) { success, message in
+                        DispatchQueue.main.async {
+                            completion(success, message, warning)
+                        }
+                    }
+                }
+            }
+        }
 }
