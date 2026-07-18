@@ -215,10 +215,11 @@ struct AutoWalkView: View {
     @State private var isRunning = false
     @State private var isPaused = false
     @State private var timeRemaining: TimeInterval = 0
-    @State private var timer: Timer?
+    @State private var timer: Timer? = nil
     @State private var liveActivity: Activity<WalkAttributes>? = nil
     
     @AppStorage("enableLiveActivity") private var enableLiveActivity = true
+    @AppStorage("liveActivityInterval") private var liveActivityInterval = 15
     
     @State private var totalStepsInjected: Double = 0
     
@@ -230,6 +231,8 @@ struct AutoWalkView: View {
     @State private var showWarningAlert = false
     @State private var warningMessage = ""
     @State private var hasShownThresholdWarning = false
+    
+    @State private var backgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     
     private var projectedTotalSteps: Int {
         let mins = Double(minutesString) ?? 0
@@ -432,142 +435,142 @@ struct AutoWalkView: View {
     private func triggerHaptic() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     
     // --- TIMER LOGIC ---
-        private func startTimer() {
-            guard projectedTotalSteps > 0 else { return }
-            let minutes = Double(minutesString) ?? 0
-            let rate = Double(stepsPerMinuteString) ?? 0
+    private func startTimer() {
+        guard projectedTotalSteps > 0 else { return }
+        let minutes = Double(minutesString) ?? 0
+        let rate = Double(stepsPerMinuteString) ?? 0
+        
+        UIApplication.shared.isIdleTimerDisabled = true
+        hasShownThresholdWarning = false
+        
+        timeRemaining = minutes * 60
+        totalStepsInjected = 0
+        isRunning = true
+        isPaused = false
+        
+        let humanizeObject = UserDefaults.standard.object(forKey: "humanizeData")
+        let humanizeData = humanizeObject == nil ? true : humanizeObject as! Bool
+        
+        // --- START SILENT AUDIO HACK ---
+        BackgroundAudioManager.shared.start()
+        
+        // --- LIVE ACTIVITY: START ---
+        if enableLiveActivity && ActivityAuthorizationInfo().areActivitiesEnabled {
+            let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
+            let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
             
-            UIApplication.shared.isIdleTimerDisabled = true
-            hasShownThresholdWarning = false
-            
-            // --- START SILENT AUDIO HACK ---
-            BackgroundAudioManager.shared.start()
-            
-            timeRemaining = minutes * 60
-            totalStepsInjected = 0 // Used purely for the smooth UI
-            isRunning = true
-            isPaused = false
-            
-            // Read the humanize setting (defaults to true if never opened)
-            let humanizeObject = UserDefaults.standard.object(forKey: "humanizeData")
-            let humanizeData = humanizeObject == nil ? true : humanizeObject as! Bool
-            
-            // --- LIVE ACTIVITY: START ---
-            if enableLiveActivity && ActivityAuthorizationInfo().areActivitiesEnabled {
-                let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
-                let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
-                
-                Task { @MainActor in
-                    let content = ActivityContent(state: initialState, staleDate: nil)
-                    do {
-                        liveActivity = try Activity.request(attributes: attributes, content: content)
-                    } catch {
-                        print("Failed to start Live Activity: \(error)")
-                    }
+            Task { @MainActor in
+                let content = ActivityContent(state: initialState, staleDate: nil)
+                do {
+                    liveActivity = try Activity.request(attributes: attributes, content: content)
+                } catch {
+                    print("Failed to start Live Activity: \(error)")
                 }
             }
-            
-            let stepsPerSecond = rate / 60.0
-            let base10sBatch = stepsPerSecond * 10.0
-            
-            // NEW: Track what actually goes into the database to true-up at the end
-            var actuallyInjectedToHealthKit = 0.0
-            let targetTotalAsDouble = Double(projectedTotalSteps)
-            
-            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                if !isPaused {
-                    timeRemaining -= 1.0
+        }
+        
+        let stepsPerSecond = rate / 60.0
+        let base10sBatch = stepsPerSecond * 10.0
+        var actuallyInjectedToHealthKit = 0.0
+        let targetTotalAsDouble = Double(projectedTotalSteps)
+        
+        // --- SAFE UI TIMER ---
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            if !isPaused {
+                timeRemaining -= 1.0
+                totalStepsInjected += stepsPerSecond
+                
+                // 1. HEALTHKIT BATCH WRITE (Every 10 seconds)
+                if Int(timeRemaining) % 10 == 0 || timeRemaining <= 0 {
+                    var stepsToInject = 0.0
                     
-                    // Keep the UI smooth and linear
-                    totalStepsInjected += stepsPerSecond
+                    if timeRemaining <= 0 {
+                        stepsToInject = max(0, targetTotalAsDouble - actuallyInjectedToHealthKit)
+                    } else {
+                        let variance = humanizeData ? Double.random(in: 0.85...1.15) : 1.0
+                        stepsToInject = base10sBatch * variance
+                    }
                     
-                    // --- LIVE ACTIVITY: UPDATE ---
+                    actuallyInjectedToHealthKit += stepsToInject
+                    
+                    stepManager.injectSafely(steps: stepsToInject) { success, errorMessage, warning in
+                        DispatchQueue.main.async {
+                            if success {
+                                if let warningText = warning, !hasShownThresholdWarning {
+                                    hasShownThresholdWarning = true
+                                    isPaused = true
+                                    UIApplication.shared.isIdleTimerDisabled = false
+                                    warningMessage = warningText
+                                    showWarningAlert = true
+                                }
+                                if timeRemaining <= 0 { stopTimer() }
+                            } else if let error = errorMessage {
+                                stopTimer()
+                                alertMessage = error
+                                showAlert = true
+                            }
+                        }
+                    }
+                }
+                
+                // 2. LIVE ACTIVITY UPDATE (Every 15 seconds)
+                if Int(timeRemaining) % liveActivityInterval == 0 || timeRemaining <= 0 {
                     Task { @MainActor in
                         let updatedState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: Int(totalStepsInjected))
                         let content = ActivityContent(state: updatedState, staleDate: nil)
                         await liveActivity?.update(content)
                     }
-                    
-                    // --- HEALTHKIT BATCH WRITE (Every 10 seconds or at the end) ---
-                    if Int(timeRemaining) % 10 == 0 || timeRemaining <= 0 {
-                        
-                        var stepsToInject = 0.0
-                        
-                        if timeRemaining <= 0 {
-                            // THE TRUE-UP: On the exact last second, inject whatever is left to hit the exact target
-                            stepsToInject = max(0, targetTotalAsDouble - actuallyInjectedToHealthKit)
-                        } else {
-                            // THE HUMANIZER: Apply a random variance between 85% and 115% of the base batch
-                            let variance = humanizeData ? Double.random(in: 0.85...1.15) : 1.0
-                            stepsToInject = base10sBatch * variance
-                        }
-                        
-                        actuallyInjectedToHealthKit += stepsToInject
-                        
-                        stepManager.injectSafely(steps: stepsToInject) { success, errorMessage, warning in
-                            DispatchQueue.main.async {
-                                if success {
-                                    if let warningText = warning, !hasShownThresholdWarning {
-                                        hasShownThresholdWarning = true
-                                        isPaused = true
-                                        UIApplication.shared.isIdleTimerDisabled = false
-                                        warningMessage = warningText
-                                        showWarningAlert = true
-                                    }
-                                    if timeRemaining <= 0 { stopTimer() }
-                                } else if let error = errorMessage {
-                                    stopTimer()
-                                    alertMessage = error
-                                    showAlert = true
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
-
-        private func togglePause() {
-            isPaused.toggle()
-            
-            // 1. Handle the screen sleeping
-            UIApplication.shared.isIdleTimerDisabled = !isPaused
-            
-            // 2. Handle the background audio battery drain
-            if isPaused {
-                BackgroundAudioManager.shared.stop()
-            } else {
-                BackgroundAudioManager.shared.start()
-            }
-            
-            // 3. Update the Lock Screen Live Activity to show the paused state
-            Task { @MainActor in
-                let stateText = isPaused ? "Paused" : timeFormatted(timeRemaining)
-                let updatedState = WalkAttributes.ContentState(timeRemaining: stateText, stepsInjected: Int(totalStepsInjected))
-                let content = ActivityContent(state: updatedState, staleDate: nil)
-                await liveActivity?.update(content)
-            }
+    }
+    
+    private func togglePause() {
+        isPaused.toggle()
+        
+        // 1. Handle the screen sleeping
+        UIApplication.shared.isIdleTimerDisabled = !isPaused
+        
+        // 2. Handle the background audio battery drain
+        if isPaused {
+            BackgroundAudioManager.shared.stop()
+        } else {
+            BackgroundAudioManager.shared.start()
         }
         
-        private func stopTimer() {
-            timer?.invalidate()
-            timer = nil
-            isRunning = false
-            isPaused = false
-            timeRemaining = 0
-            UIApplication.shared.isIdleTimerDisabled = false
-            
-            // --- STOP SILENT AUDIO HACK ---
-            BackgroundAudioManager.shared.stop()
-            
-            // --- LIVE ACTIVITY: END ---
-            // SWIFT 6 FIX: Force execution on the MainActor
-            Task { @MainActor in
-                let finalState = WalkAttributes.ContentState(timeRemaining: "Finished", stepsInjected: Int(totalStepsInjected))
-                let content = ActivityContent(state: finalState, staleDate: nil)
-                await liveActivity?.end(content, dismissalPolicy: .immediate)
-            }
+        // 3. Update the Lock Screen Live Activity to show the paused state
+        Task { @MainActor in
+            let stateText = isPaused ? "Paused" : timeFormatted(timeRemaining)
+            let updatedState = WalkAttributes.ContentState(timeRemaining: stateText, stepsInjected: Int(totalStepsInjected))
+            let content = ActivityContent(state: updatedState, staleDate: nil)
+            await liveActivity?.update(content)
         }
+    }
+    
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+        isRunning = false
+        isPaused = false
+        timeRemaining = 0
+        UIApplication.shared.isIdleTimerDisabled = false
+        
+        // --- STOP SILENT AUDIO HACK ---
+        BackgroundAudioManager.shared.stop()
+        
+        // --- LIVE ACTIVITY: END ---
+        // SWIFT 6 FIX: Force execution on the MainActor
+        Task { @MainActor in
+            let finalState = WalkAttributes.ContentState(timeRemaining: "Finished", stepsInjected: Int(totalStepsInjected))
+            let content = ActivityContent(state: finalState, staleDate: nil)
+            await liveActivity?.end(content, dismissalPolicy: .immediate)
+        }
+        
+        if backgroundTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            backgroundTaskID = .invalid
+        }
+    }
     
     private func timeFormatted(_ totalSeconds: TimeInterval) -> String {
         let seconds: Int = Int(totalSeconds) % 60
@@ -702,6 +705,7 @@ struct SettingsView: View {
     
     // Live Activity Setting
     @AppStorage("enableLiveActivity") private var enableLiveActivity = true
+    @AppStorage("liveActivityInterval") private var liveActivityInterval = 15
     
     var body: some View {
         NavigationView {
@@ -725,7 +729,7 @@ struct SettingsView: View {
                         
                         Divider()
                         
-                        // NEW: Threshold Toggle and Stepper
+                        // Threshold Toggle and Stepper
                         Toggle("Enable Approach Warning", isOn: $enableThresholdAlert)
                         
                         if enableThresholdAlert {
@@ -754,6 +758,18 @@ struct SettingsView: View {
                     footer: Text("Displays your real-time Auto Walk progress on the Lock Screen and Dynamic Island.")
                 ) {
                     Toggle("Enable Live Activity", isOn: $enableLiveActivity)
+                    
+                    if enableLiveActivity {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Update Every: \(liveActivityInterval) seconds")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                            
+                            Stepper("Adjust Interval", value: $liveActivityInterval, in: 1...60, step: 1)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
                 
                 Section(header: Text("About")) {
