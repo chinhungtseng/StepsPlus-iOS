@@ -438,6 +438,9 @@ struct AutoWalkView: View {
             UIApplication.shared.isIdleTimerDisabled = true
             hasShownThresholdWarning = false
             
+            // --- START SILENT AUDIO HACK ---
+            BackgroundAudioManager.shared.start()
+            
             timeRemaining = minutes * 60
             totalStepsInjected = 0 // Used purely for the smooth UI
             isRunning = true
@@ -521,10 +524,27 @@ struct AutoWalkView: View {
                 }
             }
         }
-        
+
         private func togglePause() {
             isPaused.toggle()
+            
+            // 1. Handle the screen sleeping
             UIApplication.shared.isIdleTimerDisabled = !isPaused
+            
+            // 2. Handle the background audio battery drain
+            if isPaused {
+                BackgroundAudioManager.shared.stop()
+            } else {
+                BackgroundAudioManager.shared.start()
+            }
+            
+            // 3. Update the Lock Screen Live Activity to show the paused state
+            Task { @MainActor in
+                let stateText = isPaused ? "Paused" : timeFormatted(timeRemaining)
+                let updatedState = WalkAttributes.ContentState(timeRemaining: stateText, stepsInjected: Int(totalStepsInjected))
+                let content = ActivityContent(state: updatedState, staleDate: nil)
+                await liveActivity?.update(content)
+            }
         }
         
         private func stopTimer() {
@@ -534,6 +554,9 @@ struct AutoWalkView: View {
             isPaused = false
             timeRemaining = 0
             UIApplication.shared.isIdleTimerDisabled = false
+            
+            // --- STOP SILENT AUDIO HACK ---
+            BackgroundAudioManager.shared.stop()
             
             // --- LIVE ACTIVITY: END ---
             // SWIFT 6 FIX: Force execution on the MainActor

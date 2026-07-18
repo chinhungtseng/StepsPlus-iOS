@@ -387,6 +387,7 @@
 				DEVELOPMENT_TEAM = 63Z7P96833;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Step--Info.plist";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
@@ -423,6 +424,7 @@
 				DEVELOPMENT_TEAM = 63Z7P96833;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Step--Info.plist";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Required to inject mock step data";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
