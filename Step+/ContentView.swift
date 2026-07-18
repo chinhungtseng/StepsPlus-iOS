@@ -218,6 +218,8 @@ struct AutoWalkView: View {
     @State private var timer: Timer?
     @State private var liveActivity: Activity<WalkAttributes>? = nil
     
+    @AppStorage("enableLiveActivity") private var enableLiveActivity = true
+    
     @State private var totalStepsInjected: Double = 0
     
     // Alert states
@@ -451,7 +453,7 @@ struct AutoWalkView: View {
             let humanizeData = humanizeObject == nil ? true : humanizeObject as! Bool
             
             // --- LIVE ACTIVITY: START ---
-            if ActivityAuthorizationInfo().areActivitiesEnabled {
+            if enableLiveActivity && ActivityAuthorizationInfo().areActivitiesEnabled {
                 let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
                 let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
                 
@@ -691,11 +693,15 @@ struct SettingsView: View {
     @AppStorage("enableDailyLimit") private var enableDailyLimit = true
     @AppStorage("dailyStepLimit") private var dailyStepLimit = 25000
     
-    // NEW: Threshold Alert settings
+    // Threshold Alert settings
     @AppStorage("enableThresholdAlert") private var enableThresholdAlert = false
     @AppStorage("thresholdPercentage") private var thresholdPercentage = 80
     
+    // Humanize Data Randomization setting
     @AppStorage("humanizeData") private var humanizeData = true
+    
+    // Live Activity Setting
+    @AppStorage("enableLiveActivity") private var enableLiveActivity = true
     
     var body: some View {
         NavigationView {
@@ -741,6 +747,13 @@ struct SettingsView: View {
                     footer: Text("Applies a ±15% random speed variance to your walk to bypass anti-cheat systems. The final total remains exactly the same.")
                 ) {
                     Toggle("Humanize Data Randomization", isOn: $humanizeData)
+                }
+                
+                Section(
+                    header: Text("Lock Screen Widget"),
+                    footer: Text("Displays your real-time Auto Walk progress on the Lock Screen and Dynamic Island.")
+                ) {
+                    Toggle("Enable Live Activity", isOn: $enableLiveActivity)
                 }
                 
                 Section(header: Text("About")) {
