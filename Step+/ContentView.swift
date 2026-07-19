@@ -221,6 +221,17 @@ struct AutoWalkView: View {
     @AppStorage("enableLiveActivity") private var enableLiveActivity = true
     @AppStorage("liveActivityInterval") private var liveActivityInterval = 15
     
+    // --- STATE RESTORATION VARIABLES ---
+    @AppStorage("saved_isRunning") private var saved_isRunning = false
+    @AppStorage("saved_timeRemaining") private var saved_timeRemaining = 0.0
+    @AppStorage("saved_totalSteps") private var saved_totalSteps = 0
+    @AppStorage("saved_injectedUI") private var saved_injectedUI = 0.0
+    @AppStorage("saved_injectedHK") private var saved_injectedHK = 0.0
+    @AppStorage("saved_rate") private var saved_rate = 0.0
+    @AppStorage("saved_minutesString") private var saved_minutesString = ""
+    @AppStorage("saved_rateString") private var saved_rateString = ""
+    
+    @State private var actuallyInjectedToHealthKit = 0.0
     @State private var totalStepsInjected: Double = 0
     
     // Alert states
@@ -429,27 +440,71 @@ struct AutoWalkView: View {
         } message: {
             Text(warningMessage)
         }
+        
+        .onAppear {
+            restoreSession()
+        }
     }
     
     // --- HELPER LOGIC ---
     private func triggerHaptic() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
     
+    private func restoreSession() {
+        if saved_isRunning && saved_timeRemaining > 0 {
+            // 1. Restore the text box inputs (this fixes the get-only error!)
+            minutesString = saved_minutesString
+            stepsPerMinuteString = saved_rateString
+            
+            // 2. Restore exact mathematical progress
+            timeRemaining = saved_timeRemaining
+            totalStepsInjected = saved_injectedUI
+            actuallyInjectedToHealthKit = saved_injectedHK
+            
+            // 3. Set to Paused so the user can safely hit 'Resume'
+            isRunning = true
+            isPaused = true
+            
+            // 4. Spin up the background engines silently
+            startTimer()
+        }
+    }
+    
     // --- TIMER LOGIC ---
     private func startTimer() {
         guard projectedTotalSteps > 0 else { return }
-        let minutes = Double(minutesString) ?? 0
-        let rate = Double(stepsPerMinuteString) ?? 0
         
         UIApplication.shared.isIdleTimerDisabled = true
         hasShownThresholdWarning = false
         
-        timeRemaining = minutes * 60
-        totalStepsInjected = 0
-        isRunning = true
-        isPaused = false
-        
         let humanizeObject = UserDefaults.standard.object(forKey: "humanizeData")
         let humanizeData = humanizeObject == nil ? true : humanizeObject as! Bool
+        
+        // --- CHECKPOINT LOGIC: Fresh Start vs Resume ---
+        let rate: Double
+        if !saved_isRunning || timeRemaining <= 0 {
+            // 🟢 FRESH START
+            let minutes = Double(minutesString) ?? 0
+            rate = Double(stepsPerMinuteString) ?? 0
+            
+            timeRemaining = minutes * 60
+            totalStepsInjected = 0
+            actuallyInjectedToHealthKit = 0.0 // Reset HealthKit tracker
+            
+            // Save initial state to disk
+            saved_rate = rate
+            saved_totalSteps = projectedTotalSteps
+            saved_isRunning = true
+            
+            // NEW: Save the text inputs
+            saved_minutesString = minutesString
+            saved_rateString = stepsPerMinuteString
+        } else {
+            // 🟡 RESUMING KILLED SESSION
+            rate = saved_rate
+        }
+        
+        isRunning = true
+        // Note: We don't set isPaused = false here, so the restoreSession() pause stays intact!
         
         // --- START SILENT AUDIO HACK ---
         BackgroundAudioManager.shared.start()
@@ -457,22 +512,18 @@ struct AutoWalkView: View {
         // --- LIVE ACTIVITY: START ---
         if enableLiveActivity && ActivityAuthorizationInfo().areActivitiesEnabled {
             let attributes = WalkAttributes(targetTotal: projectedTotalSteps)
-            let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: 0)
+            let initialState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: Int(totalStepsInjected))
             
             Task { @MainActor in
                 let content = ActivityContent(state: initialState, staleDate: nil)
-                do {
-                    liveActivity = try Activity.request(attributes: attributes, content: content)
-                } catch {
-                    print("Failed to start Live Activity: \(error)")
-                }
+                do { liveActivity = try Activity.request(attributes: attributes, content: content) }
+                catch { print("Failed Live Activity: \(error)") }
             }
         }
         
         let stepsPerSecond = rate / 60.0
         let base10sBatch = stepsPerSecond * 10.0
-        var actuallyInjectedToHealthKit = 0.0
-        let targetTotalAsDouble = Double(projectedTotalSteps)
+        let targetTotalAsDouble = Double(saved_totalSteps)
         
         // --- SAFE UI TIMER ---
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
@@ -492,6 +543,11 @@ struct AutoWalkView: View {
                     }
                     
                     actuallyInjectedToHealthKit += stepsToInject
+                    
+                    // --- 💾 SAVE CHECKPOINT TO DISK ---
+                    saved_timeRemaining = timeRemaining
+                    saved_injectedUI = totalStepsInjected
+                    saved_injectedHK = actuallyInjectedToHealthKit
                     
                     stepManager.injectSafely(steps: stepsToInject) { success, errorMessage, warning in
                         DispatchQueue.main.async {
@@ -513,7 +569,7 @@ struct AutoWalkView: View {
                     }
                 }
                 
-                // 2. LIVE ACTIVITY UPDATE (Every 15 seconds)
+                // 2. LIVE ACTIVITY UPDATE (Uses user's custom interval)
                 if Int(timeRemaining) % liveActivityInterval == 0 || timeRemaining <= 0 {
                     Task { @MainActor in
                         let updatedState = WalkAttributes.ContentState(timeRemaining: timeFormatted(timeRemaining), stepsInjected: Int(totalStepsInjected))
@@ -548,6 +604,13 @@ struct AutoWalkView: View {
     }
     
     private func stopTimer() {
+        saved_isRunning = false
+        saved_timeRemaining = 0
+        saved_injectedUI = 0
+        saved_injectedHK = 0
+        saved_minutesString = ""
+        saved_rateString = ""
+        
         timer?.invalidate()
         timer = nil
         isRunning = false
