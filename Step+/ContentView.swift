@@ -1,6 +1,7 @@
 import SwiftUI
 import HealthKit
 import ActivityKit
+import UserNotifications
 
 struct ContentView: View {
     var body: some View {
@@ -442,6 +443,8 @@ struct AutoWalkView: View {
         }
         
         .onAppear {
+            // Ask for banner permission
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
             restoreSession()
         }
     }
@@ -559,7 +562,10 @@ struct AutoWalkView: View {
                                     warningMessage = warningText
                                     showWarningAlert = true
                                 }
-                                if timeRemaining <= 0 { stopTimer() }
+                                if timeRemaining <= 0 {
+                                    triggerCompletionBanner(steps: projectedTotalSteps, minutes: minutesString)
+                                    stopTimer()
+                                }
                             } else if let error = errorMessage {
                                 stopTimer()
                                 alertMessage = error
@@ -633,6 +639,21 @@ struct AutoWalkView: View {
             UIApplication.shared.endBackgroundTask(backgroundTaskID)
             backgroundTaskID = .invalid
         }
+    }
+    
+    private func triggerCompletionBanner(steps: Int, minutes: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Auto Walk Complete!"
+        
+        // Formats the numbers cleanly (e.g., 5,000 steps)
+        let formattedSteps = steps.formatted(.number)
+        content.body = "Successfully added \(formattedSteps) steps over \(minutes) minutes."
+        
+        content.sound = UNNotificationSound.default
+        
+        // Trigger immediately
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
     
     private func timeFormatted(_ totalSeconds: TimeInterval) -> String {
