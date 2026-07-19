@@ -57,7 +57,7 @@ struct QuickInjectView: View {
                             )
                             .shadow(color: (isAdding ? Color.blue : Color.red).opacity(0.3), radius: 10, x: 0, y: 5)
                         
-                        Text("Steps+")
+                        Text(Bundle.main.appName)
                             .font(.system(size: 36, weight: .heavy, design: .rounded))
                     }
                     .padding(.top, 40)
@@ -725,7 +725,7 @@ struct StatisticView: View {
                                             HStack {
                                                 Text(source.key)
                                                     .font(.headline)
-                                                    .foregroundColor(source.key == "Steps+" ? .teal : .primary)
+                                                    .foregroundColor(source.key == Bundle.main.appName ? .teal : .primary)
                                                 Spacer()
                                                 Text("\(Int(source.value))")
                                                     .fontWeight(.semibold)
@@ -739,7 +739,7 @@ struct StatisticView: View {
                                                         .foregroundColor(Color(UIColor.tertiarySystemGroupedBackground))
                                                     Capsule()
                                                         .frame(width: max(0, geometry.size.width * CGFloat(source.value / totalSteps)), height: 8)
-                                                        .foregroundColor(source.key == "Steps+" ? .teal : .blue)
+                                                        .foregroundColor(source.key == Bundle.main.appName ? .teal : .blue)
                                                 }
                                             }
                                             .frame(height: 8)
@@ -865,7 +865,23 @@ struct SettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Configs")
+            .navigationTitle(Bundle.main.appName)
         }
+    }
+}
+
+import Foundation
+
+extension Bundle {
+    var appName: String {
+        // Try to get the public Display Name first
+        if let displayName = object(forInfoDictionaryKey: "CFBundleDisplayName") as? String {
+            return displayName
+        }
+        // Fall back to the internal Bundle Name if Display Name is blank
+        if let bundleName = object(forInfoDictionaryKey: "CFBundleName") as? String {
+            return bundleName
+        }
+        return "App" // Failsafe
     }
 }

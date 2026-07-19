@@ -48,7 +48,7 @@ struct StepsShortcutsProvider: AppShortcutsProvider {
             phrases: [
                 "Inject steps in \(.applicationName)"
             ],
-            shortTitle: "Steps+ Custom Inject",
+            shortTitle: "\(Bundle.main.appName) Custom Inject",
             systemImageName: "figure.walk.circle.fill"
         )
     }

@@ -70,7 +70,7 @@ class StepManager {
                 }
                 
                 if samplesToDelete.isEmpty {
-                    DispatchQueue.main.async { completion(false, "No past Steps+ entries found to delete.") }
+                    DispatchQueue.main.async { completion(false, "No past \(Bundle.main.appName) entries found to delete.") }
                     return
                 }
                 
